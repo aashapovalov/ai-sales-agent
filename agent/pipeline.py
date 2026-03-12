@@ -1,5 +1,6 @@
 """
 Pipeline orchestrator — runs all 4 agent steps in sequence.
+Prints each step's result immediately as it completes.
 
 Flow:
     Step 0 — Memory Lookup      : check Agent Memory API for prior company events
@@ -7,17 +8,23 @@ Flow:
     Step 2 — Pain Points        : identify 2-3 specific pain points
     Step 3 — Outreach Message   : generate personalized cold outreach message
     Save   — Auto-store results : POST both pain_points and cold_outreach to Memory API
-
-Each step receives only what it needs.
-Past context from Step 0 flows into Steps 1, 2, and 3.
 """
 
 import json
 import os
+from typing import Optional
 
 import httpx
 from dotenv import load_dotenv
+from rich.console import Console
 
+from agent.display import (
+    display_saved,
+    display_step0,
+    display_step1,
+    display_step2,
+    display_step3,
+)
 from agent.models import AgentResult, SalesEventCreate
 from agent.steps import (
     step0_memory_lookup,
@@ -61,30 +68,31 @@ def _save_event(company: str, persona: str, product: str, event_type: str, conte
 
 # ── Main pipeline ──────────────────────────────────────────────────────────────
 
-def run(company: str, persona: str, product: str) -> AgentResult:
+def run(company: str, persona: str, product: str, console: Optional[Console] = None) -> AgentResult:
     """
     Run the full agent pipeline for a given company, persona, and product.
-
-    Returns an AgentResult containing:
-    - PersonaAnalysis   (Step 1 output)
-    - PainPoints        (Step 2 output)
-    - OutreachMessage   (Step 3 output)
-    - Memory metadata   (whether past context was found and used)
-    - saved_event_id    (ID of the cold_outreach event stored in Memory API)
+    Prints each step's result immediately as it completes.
     """
+    if console is None:
+        console = Console()
 
     # ── Step 0 — Memory Lookup ─────────────────────────────────────────────────
+    console.print("\n  [dim]Step 0 — checking memory...[/dim]")
     past_events, past_context = step0_memory_lookup(company)
+    display_step0(console, len(past_events), company)
 
     # ── Step 1 — Company & Persona Analysis ───────────────────────────────────
+    console.print("\n  [dim]Step 1 — analyzing company and persona...[/dim]")
     analysis = step1_analyze(
         company=company,
         persona=persona,
         product=product,
         past_context=past_context if past_context else None,
     )
+    display_step1(console, analysis)
 
     # ── Step 2 — Pain Point Identification ────────────────────────────────────
+    console.print("\n  [dim]Step 2 — identifying pain points...[/dim]")
     pain_points = step2_identify_pains(
         company=company,
         persona=persona,
@@ -92,8 +100,10 @@ def run(company: str, persona: str, product: str) -> AgentResult:
         analysis=analysis,
         past_context=past_context if past_context else None,
     )
+    display_step2(console, pain_points)
 
     # ── Step 3 — Outreach Message Generation ──────────────────────────────────
+    console.print("\n  [dim]Step 3 — generating outreach message...[/dim]")
     message = step3_generate_outreach(
         company=company,
         persona=persona,
@@ -102,9 +112,9 @@ def run(company: str, persona: str, product: str) -> AgentResult:
         pain_points=pain_points,
         past_context=past_context if past_context else None,
     )
+    display_step3(console, message)
 
     # ── Save — Store results in Memory API ────────────────────────────────────
-    # Save pain points as a separate event so future runs can avoid repeating them
     _save_event(
         company=company,
         persona=persona,
@@ -112,8 +122,6 @@ def run(company: str, persona: str, product: str) -> AgentResult:
         event_type="pain_points",
         content=pain_points.model_dump(),
     )
-
-    # Save the outreach message — this is the primary event for memory retrieval
     saved_event_id = _save_event(
         company=company,
         persona=persona,
@@ -121,6 +129,7 @@ def run(company: str, persona: str, product: str) -> AgentResult:
         event_type="cold_outreach",
         content=message.model_dump(),
     )
+    display_saved(console, saved_event_id, company)
 
     return AgentResult(
         company=company,
