@@ -11,7 +11,7 @@ The system has two independent processes that work together:
 │                             │     │                             │
 │  Collects user input        │     │  FastAPI + SQLite           │
 │  Runs 4-step pipeline       │────▶│  Stores sales events        │
-│  Displays results           │◀────│  Serves past context        │
+│  Streams results per step   │◀────│  Serves past context        │
 │                             │     │                             │
 │  Runs once, then exits      │     │  Runs continuously          │
 └─────────────────────────────┘     └─────────────────────────────┘
@@ -28,8 +28,9 @@ if the Memory API is not running, skipping memory lookup and save steps.
 ```
 ai-sales-agent/
 │
-├── run_agent.py              CLI entry point
-│     └── agent/pipeline.py  Orchestrates all 4 steps
+├── run_agent.py              CLI entry point — collects input, passes console to pipeline
+│     └── agent/pipeline.py  Orchestrates all 4 steps, streams results as each completes
+│           ├── agent/display.py      All Rich terminal output — one function per step
 │           ├── agent/steps.py        Step functions (Claude API calls)
 │           │     └── prompts/*.txt   Prompt templates per step
 │           └── agent/models.py       Pydantic schemas (shared)
@@ -45,9 +46,16 @@ ai-sales-agent/
 `agent/models.py` is the only file used by both processes —
 it defines the shared data contracts between the agent and the API.
 
+`agent/display.py` owns all terminal output — pipeline.py calls one display
+function after each step completes, keeping orchestration and presentation separate.
+
 ---
 
 ## Data flow — single run
+
+Each step's result is displayed immediately as it comes back from Claude.
+The user sees output streaming in every ~8 seconds rather than waiting
+30-40 seconds for everything at once.
 
 ```
 User input
@@ -58,6 +66,7 @@ User input
 │     Step 0        │  GET /events?company={company}
 │  Memory Lookup    │──────────────────────────────▶ Memory API
 │                   │◀────────────────────────────── past events[]
+│                   │  → display_step0()             ↓ printed immediately
 └────────┬──────────┘
          │ past_context{}
          ▼
@@ -65,6 +74,7 @@ User input
 │     Step 1        │  Prompt: step1_analyze.txt
 │  Persona Analysis │──────────────────────────────▶ Claude API
 │                   │◀────────────────────────────── PersonaAnalysis{}
+│                   │  → display_step1()             ↓ printed immediately
 └────────┬──────────┘
          │ analysis{}
          ▼
@@ -72,6 +82,7 @@ User input
 │     Step 2        │  Prompt: step2_painpoints.txt
 │  Pain Points      │──────────────────────────────▶ Claude API
 │                   │◀────────────────────────────── PainPoints{}
+│                   │  → display_step2()             ↓ printed immediately
 └────────┬──────────┘
          │ pain_points{}
          ▼
@@ -79,6 +90,7 @@ User input
 │     Step 3        │  Prompt: step3_outreach.txt
 │  Outreach Message │──────────────────────────────▶ Claude API
 │                   │◀────────────────────────────── OutreachMessage{}
+│                   │  → display_step3()             ↓ printed immediately
 └────────┬──────────┘
          │ message{}
          ▼
@@ -88,7 +100,7 @@ User input
 └────────┬──────────┘
          │ AgentResult{}
          ▼
-    CLI Display
+    display_saved()
 ```
 
 ---

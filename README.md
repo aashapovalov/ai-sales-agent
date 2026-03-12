@@ -16,6 +16,8 @@ Give it a company, a target persona, and your product. It reasons in three steps
 2. **Identifies** 2–3 specific pain points for that persona
 3. **Generates** a personalized cold outreach message based on steps 1 and 2
 
+Each step's result is displayed immediately as it completes — no waiting for everything at once.
+
 On subsequent runs for the same company, it **retrieves past interactions** from the Agent Memory API
 and adjusts — avoiding hooks already used, building on pain points already discovered.
 
@@ -63,6 +65,9 @@ python run_agent.py
   Target persona:      Head of Payments
   Product description: AI fraud detection platform
 
+  Step 0 — checking memory...
+  ◦ Memory: No prior events found for Stripe — fresh start
+
   ── Step 1 — Company & Persona Analysis ──────────────────
   Company type:   Global payments infrastructure
   Stage:          Enterprise
@@ -72,21 +77,23 @@ python run_agent.py
     • false positive rate
     • manual review overhead
 
+  Step 2 — identifying pain points...
+
   ── Step 2 — Pain Point Identification ───────────────────
   Top pain: Increasing fraud complexity outpacing rule-based systems
   1. Fraud pattern complexity growing faster than detection rules
   2. Manual investigation overhead scaling with transaction volume
   3. Early detection gap in high-velocity transaction windows
 
+  Step 3 — generating outreach message...
+
   ── Step 3 — Outreach Message ────────────────────────────
   ┌──────────────────────────────────────────────────────┐
   │ Subject: False positive rates climbing at Stripe?    │
   │                                                      │
-  │ Hi [Name],                                           │
-  │                                                      │
-  │ Payments teams processing at Stripe's scale often    │
-  │ find that fraud patterns evolve faster than the      │
-  │ rules written to catch them...                       │
+  │ Payments teams at Stripe's scale find that fraud     │
+  │ patterns evolve faster than the rules written to     │
+  │ catch them...                                        │
   └──────────────────────────────────────────────────────┘
   ✓ Saved to memory as event #1
 ```
@@ -120,7 +127,8 @@ ai-sales-agent/
 ├── agent/
 │   ├── models.py         ← Pydantic schemas for all steps
 │   ├── steps.py          ← 4 reasoning step functions
-│   └── pipeline.py       ← orchestrates the full run
+│   ├── pipeline.py       ← orchestrates the full run
+│   └── display.py        ← all Rich terminal output
 ├── api/
 │   ├── server.py         ← FastAPI routes
 │   └── storage.py        ← SQLite storage layer
